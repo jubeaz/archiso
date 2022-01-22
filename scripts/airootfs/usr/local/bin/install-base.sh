@@ -3,6 +3,7 @@
 # stop on errors
 set -eu
 HOSTNAME=""
+DOMAINE_NAME=${DOMAINE_NAME:-"local"}
 
 . /root/secrets.sh --${HOSTNAME}
 
@@ -11,7 +12,7 @@ LANGUAGE=${LANGUAGE:-'en_US.UTF-8'}
 COUNTRY=${COUNTRY:-FR}
 ADDITIONAL_PKGS=${ADDITIONAL_PKGS:-"vim python python-cryptography"}
 ANSIBLE_LOGIN=${ANSIBLE_LOGIN:-"ansible"}
-ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible"}
+ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible_P1"}
 
 #echo ">>>>>>>>>>>>>>>> COUNTRY: ${COUNTRY}"
 #echo ">>>>>>>>>>>>>>>> ADDITIONAL_PKGS: ${ADDITIONAL_PKGS}"
@@ -19,8 +20,6 @@ ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible"}
 #echo ">>>>>>>>>>>>>>>> ${HOSTNAME}"
 #echo ">>>>>>>>>>>>>>>> ${KEYMAP}"
 #echo ">>>>>>>>>>>>>>>> ${LANGUAGE}"
-#echo ">>>>>>>>>>>>>>>> ${PACKER_BUILDER_TYPE}"
-#echo ">>>>>>>>>>>>>>>> ${HTTPSRV}"
 
 TIMEZONE='UTC'
 CONFIG_SCRIPT='/usr/local/bin/arch-config.sh'
@@ -38,7 +37,7 @@ echo ">>>> install-base.sh: Setting pacman ${COUNTRY} mirrors.."
 curl -s "$MIRRORLIST" |  sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
 
 echo ">>>> install-base.sh: Bootstrapping the base installation.."
-/usr/bin/pacstrap ${TARGET_DIR} base base-devel linux-lts linux-firmware lvm2
+/usr/bin/pacstrap ${TARGET_DIR} base base-devel linux-lts linux-lts-headers linux-firmware lvm2
 
 echo ">>>> install-base.sh: Generating the filesystem table.."
 /usr/bin/genfstab -U -p ${TARGET_DIR} >> "${TARGET_DIR}/etc/fstab"
@@ -68,6 +67,8 @@ CONFIG_SCRIPT_SHORT=`basename "$CONFIG_SCRIPT"`
 cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring hostname, timezone, and keymap.."
   echo '${HOSTNAME}' > /etc/hostname
+  echo '127.0.0.1   localhost' > /etc/hostname
+  echo '127.0.1.1   ${HOSTNAME} ${HOSTNAME}.{DOMAINE_NAME}' >> /etc/hostname
   /usr/bin/ln -s /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
   echo 'KEYMAP=${KEYMAP}' > /etc/vconsole.conf
 
@@ -94,6 +95,9 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   pacman -S --noconfirm ufw
   pacman -S --noconfirm apparmor
   pacman -S --noconfirm firejail
+  pacman -S --noconfirm libpwquality 
+  pacman -S --noconfirm rkhunter 
+  pacman -S --noconfirm arch-audit
   pacman -S --noconfirm ${ADDITIONAL_PKGS}
 
   if [ "${IS_UEFI}" != "false" ] ; then
@@ -109,7 +113,7 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
 # #######################################
 # network
 # #######################################
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring network.."
+  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring network.ckup."
   # Disable systemd Predictable Network Interface Names and revert to traditional interface names
   # https://wiki.archlinux.org/index.php/Network_configuration#Revert_to_traditional_interface_names
   /usr/bin/ln -s /dev/null /etc/udev/rules.d/80-net-setup-link.rules
@@ -135,7 +139,6 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
 
   /usr/bin/systemctl enable sshd.service
 
-  # Workaround for https://bugs.archlinux.org/task/58355 which prevents sshd to accept connections after reboot
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Adding workaround for sshd connection issue after reboot.."
   /usr/bin/pacman -S --noconfirm rng-tools
   /usr/bin/systemctl enable rngd
@@ -146,11 +149,46 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   ssh-keygen -A
 
 # #######################################
+# ufw
+# #######################################
+
+  systemctl enable ufw
+
+# #######################################
 # Apparmor
 # #######################################
 
   systemctl enable apparmor
 
+# #######################################
+# Hardening
+# #######################################
+  /usr/bin/sed -i 's/umask 022/umask 027/' /etc/profile
+  # Disable core dumps
+  echo  '* hard core 0' >> /etc/security/limits.conf
+
+  /usr/bin/sed -i 's/PASS_MAX_DAYS	99999/PASS_MAX_DAYS 183/' /etc/login.defs
+  /usr/bin/sed -i 's/PASS_MAX_DAYS	0/PASS_MAX_DAYS 1/' /etc/login.defs
+  /usr/bin/sed -i 's/PASS_WARN_AGE	0/PASS_WARN_AGE 15/' /etc/login.defs
+  echo 'SHA_CRYPT_MIN_ROUNDS 5000' >> /etc/login.defs
+
+  # Harden passwords 
+  /usr/bin/sed -i 's/^password/#password/' /etc/pam.d/passwd
+  echo 'password required pam_pwquality.so retry=2 minlen=10 difok=6 dcredit=-1 ucredit=-1 ocredit=-1 lcredit=-1 [badwords=myservice mydomain] enforce_for_root' >> /etc/pam.d/passwd
+  echo 'password required pam_unix.so use_authtok sha512 shadow' >> /etc/pam.d/passwd
+ 
+  # Disable uncommon protocols
+  echo "blacklist dccp" >> /etc/modprobe.d/local-dontload.conf
+  echo "install dccp /bin/true" >> /etc/modprobe.d/local-dontload.conf
+  echo "blacklist sctp" >> /etc/modprobe.d/local-dontload.conf
+  echo "install sctp /bin/true" >> /etc/modprobe.d/local-dontload.conf
+  echo "blacklist rds" >> /etc/modprobe.d/local-dontload.conf
+  echo "install rds /bin/true" >> /etc/modprobe.d/local-dontload.conf
+  echo "blacklist tipc" >> /etc/modprobe.d/local-dontload.conf
+  echo "install tipc /bin/true" >> /etc/modprobe.d/local-dontload.conf
+
+  rkhunter --propupd
+  
 # #######################################
 # Ansible user
 # #######################################
@@ -180,14 +218,20 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   #/usr/bin/sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet splash ipv6.dsiable=1 lsm=landlock,lockdown,yama,apparmor,bpf"/' /etc/default/grub
 
   if [ "${IS_UEFI}" != "false" ] ; then
-    mkdir -p /boot/EFI
-    mount ${EFI_PART} /boot/EFI
-    grub-install --target=x86_64-efi --bootloader-id=grub_uefi --recheck
+    mkdir -p /boot/efi
+    mkfs.vfat -F32 ${GRUB_PART}
+    mount ${GRUB_PART} /boot/efi
+    mkdir -p /boot/efi/EFI
+    if [ "${IS_UEFI_REMOVABLE}" != "true" ] ; then
+        grub-install --target=x86_64-efii --efi-directory=/boot/efi --bootloader-id=grub_uefi --recheck
+    else
+        grub-install --target=x86_64-efii --efi-directory=/boot/efi --bootloader-id=grub_uefi --removable
+    fi
     mkdir -p /boot/grub/locale
     cp /usr/share/locale/en\@quot/LC_MESSAGES/grub.mo /boot/grub/locale/en.mo
     grub-mkconfig -o /boot/grub/grub.cfg
   else
-    grub-install --target=i386-pc --recheck ${BOOT_DISK}
+    grub-install --target=i386-pc --recheck ${GRUB_PART}
     # mkdir /boot/grub/locale
     cp /usr/share/locale/en\@quot/LC_MESSAGES/grub.mo /boot/grub/locale/en.mo
     grub-mkconfig -o /boot/grub/grub.cfg
@@ -207,10 +251,7 @@ rm "${TARGET_DIR}${CONFIG_SCRIPT}"
 echo ">>>> install-base.sh: Completing installation.."
 /usr/bin/sleep 3
 /usr/bin/umount ${TARGET_DIR}
-# Turning network interfaces down to make sure SSH session was dropped on host.
-# More info at: https://www.packer.io/docs/provisioners/shell.html#handling-reboots
-#echo '==> Turning down network interfaces and rebooting'
-# for i in $(/usr/bin/netstat -i | /usr/bin/tail +3 | /usr/bin/awk '{print $1}'); do /usr/bin/ip link set ${i} down; done
+/usr/bin/umount -a
 /usr/bin/systemctl reboot
 echo ">>>> install-base.sh: Installation complete!"
 echo ">>>>>>>>>>>>>>>>>> DONE >>>>>>>>>>>>>>>>>>>>"
