@@ -67,8 +67,8 @@ CONFIG_SCRIPT_SHORT=`basename "$CONFIG_SCRIPT"`
 cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring hostname, timezone, and keymap.."
   echo '${HOSTNAME}' > /etc/hostname
-  echo '127.0.0.1   localhost' > /etc/hostname
-  echo '127.0.1.1   ${HOSTNAME} ${HOSTNAME}.{DOMAINE_NAME}' >> /etc/hostname
+  echo '127.0.0.1   localhost' > /etc/hosts
+  echo '127.0.1.1   ${HOSTNAME} ${HOSTNAME}.${DOMAINE_NAME}' >> /etc/hosts
   /usr/bin/ln -s /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
   echo 'KEYMAP=${KEYMAP}' > /etc/vconsole.conf
 
@@ -223,9 +223,9 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
     mount ${GRUB_PART} /boot/efi
     mkdir -p /boot/efi/EFI
     if [ "${IS_UEFI_REMOVABLE}" != "true" ] ; then
-        grub-install --target=x86_64-efii --efi-directory=/boot/efi --bootloader-id=grub_uefi --recheck
+        grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=grub_uefi --recheck
     else
-        grub-install --target=x86_64-efii --efi-directory=/boot/efi --bootloader-id=grub_uefi --removable
+        grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=grub_uefi --removable
     fi
     mkdir -p /boot/grub/locale
     cp /usr/share/locale/en\@quot/LC_MESSAGES/grub.mo /boot/grub/locale/en.mo
