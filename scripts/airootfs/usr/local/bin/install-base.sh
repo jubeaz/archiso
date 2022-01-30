@@ -140,7 +140,7 @@ echo "--save /etc/pacman.d/mirrorlist" >> /etc/xdg/reflector/reflector.conf
 echo "--protocol https" >> /etc/xdg/reflector/reflector.conf
 echo "--country ${COUNTRIES}" >> /etc/xdg/reflector/reflector.conf
 echo "--latest 5" >> /etc/xdg/reflector/reflector.conf
-echo "--sorte rate" >> /etc/xdg/reflector/reflector.conf
+echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
 
 /usr/bin/systemctl enable reflector.service
 /usr/bin/systemctl enable reflector.timer
