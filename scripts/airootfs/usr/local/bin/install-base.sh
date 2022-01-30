@@ -9,7 +9,7 @@ DOMAINE_NAME=${DOMAINE_NAME:-"local"}
 
 KEYMAP=${KEYMAP:-'fr-latin1'}
 LANGUAGE=${LANGUAGE:-'en_US.UTF-8'}
-COUNTRY=${COUNTRY:-FR}
+COUNTRIES=${COUNTRIES:-France,Germany}
 ADDITIONAL_PKGS=${ADDITIONAL_PKGS:-"vim python python-cryptography"}
 ANSIBLE_LOGIN=${ANSIBLE_LOGIN:-"ansible"}
 ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible_P1"}
@@ -25,7 +25,6 @@ TIMEZONE='UTC'
 CONFIG_SCRIPT='/usr/local/bin/arch-config.sh'
 TARGET_DIR='/mnt'
 
-MIRRORLIST="https://archlinux.org/mirrorlist/?country=${COUNTRY}&protocol=http&protocol=https&ip_version=4&use_mirror_status=on"
 
 # #######################################
 #
@@ -33,11 +32,15 @@ MIRRORLIST="https://archlinux.org/mirrorlist/?country=${COUNTRY}&protocol=http&p
 #
 # #######################################
 
-echo ">>>> install-base.sh: Setting pacman ${COUNTRY} mirrors.."
-curl -s "$MIRRORLIST" |  sed 's/^#Server/Server/' > /etc/pacman.d/mirrorlist
+echo ">>>> install-base.sh: Setting pacman ${COUNTRIES} mirrors.."
+/usr/bin/reflector --verbose  --country ${COUNTRIES} --latest 5 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
 
 echo ">>>> install-base.sh: Bootstrapping the base installation.."
 /usr/bin/pacstrap ${TARGET_DIR} base base-devel linux-lts linux-lts-headers linux-firmware lvm2
+
+echo ">>>> install-base.sh: Copy mirror list.."
+/usr/bin/cp /etc/pacman.d/mirrorlist "${TARGET_DIR}/etc/pacman.d"
+
 
 echo ">>>> install-base.sh: Generating the filesystem table.."
 /usr/bin/genfstab -U -p ${TARGET_DIR} >> "${TARGET_DIR}/etc/fstab"
@@ -88,6 +91,7 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
 # #######################################
   echo ">>>> install-base.sh: Installing basic packages.."
   pacman -S --noconfirm gptfdisk
+  pacman -S --noconfirm reflector
   pacman -S --noconfirm bash-completion
   pacman -S --noconfirm openssh
   pacman -S --noconfirm rsync
@@ -95,8 +99,8 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   pacman -S --noconfirm ufw
   pacman -S --noconfirm apparmor
   pacman -S --noconfirm firejail
-  pacman -S --noconfirm libpwquality 
-  pacman -S --noconfirm rkhunter 
+  pacman -S --noconfirm libpwquality
+  pacman -S --noconfirm rkhunter
   pacman -S --noconfirm arch-audit
   pacman -S --noconfirm ${ADDITIONAL_PKGS}
 
@@ -127,6 +131,19 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
 
   /usr/bin/systemctl enable systemd-networkd
   /usr/bin/systemctl enable systemd-resolved
+
+# #######################################
+# reflector
+# #######################################
+echo "" > /etc/xdg/reflector/reflector.conf
+echo "--save /etc/pacman.d/mirrorlist" >> /etc/xdg/reflector/reflector.conf
+echo "--protocol https" >> /etc/xdg/reflector/reflector.conf
+echo "--country ${COUNTRIES}" >> /etc/xdg/reflector/reflector.conf
+echo "--latest 5" >> /etc/xdg/reflector/reflector.conf
+echo "--sorte rate" >> /etc/xdg/reflector/reflector.conf
+
+/usr/bin/systemctl enable reflector.service
+/usr/bin/systemctl enable reflector.timer
 
 # #######################################
 # sshd
