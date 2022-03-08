@@ -3,10 +3,9 @@
 # stop on errors
 set -eu
 HOSTNAME=""
-DOMAINE_NAME=${DOMAINE_NAME:-"local"}
 
 . /root/secrets.sh --${HOSTNAME}
-
+DOMAINE_NAME=${DOMAINE_NAME:-"local"}
 KEYMAP=${KEYMAP:-'fr-latin1'}
 LANGUAGE=${LANGUAGE:-'en_US.UTF-8'}
 COUNTRIES=${COUNTRIES:-France,Germany}
@@ -14,12 +13,15 @@ ADDITIONAL_PKGS=${ADDITIONAL_PKGS:-"vim python python-cryptography"}
 ANSIBLE_LOGIN=${ANSIBLE_LOGIN:-"ansible"}
 ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible_P1"}
 
-#echo ">>>>>>>>>>>>>>>> COUNTRY: ${COUNTRY}"
-#echo ">>>>>>>>>>>>>>>> ADDITIONAL_PKGS: ${ADDITIONAL_PKGS}"
-#echo ">>>>>>>>>>>>>>>> PACKER_PASSWORD: ${PACKER_PASSWORD}"
-#echo ">>>>>>>>>>>>>>>> ${HOSTNAME}"
-#echo ">>>>>>>>>>>>>>>> ${KEYMAP}"
-#echo ">>>>>>>>>>>>>>>> ${LANGUAGE}"
+echo ">>>>>>>>>>>>>>>> ${COUNTRY}"
+echo ">>>>>>>>>>>>>>>> ${HOSTNAME}"
+echo ">>>>>>>>>>>>>>>> ${KEYMAP}"
+echo ">>>>>>>>>>>>>>>> ${LANGUAGE}"
+echo ">>>>>>>>>>>>>>>> $WITH_WIFI"
+echo ">>>>>>>>>>>>>>>> $ADDITIONAL_PKGS"
+echo ">>>>>>>>>>>>>>>> $IS_UEFI"
+echo ">>>>>>>>>>>>>>>> $GRUB_PART"
+echo ">>>>>>>>>>>>>>>> $IS_UEFI_REMOVABLE"
 
 TIMEZONE='UTC'
 CONFIG_SCRIPT='/usr/local/bin/arch-config.sh'
@@ -57,13 +59,13 @@ echo ">>>> install-base.sh: Install ansible tmp key file.."
 /usr/bin/install --mode=0644 /root/.ssh/authorized_keys "${TARGET_DIR}/ansible.pub"
 
 echo ">>>> install-base.sh: Install netplan "
-mkdir "${TARGET_DIR}/etc/netplan"
+mkdir -p "${TARGET_DIR}/etc/netplan"
 /usr/bin/install --mode=0644 "/root/${HOSTNAME}.yaml" "${TARGET_DIR}/etc/netplan/${HOSTNAME}.yaml"
 
 if [ "${WITH_WIFI}" == "true" ] ; then
   echo ">>>> install-base.sh: copy wifi networks"
-  mkdir ${TARGET_DIR}/var/lib/iwd
-  cp -r /var/lib/iwd/* ${TARGET_DIR}/var/lib/iwd
+  mkdir -p ${TARGET_DIR}/var/lib/iwd
+  cp -rf /var/lib/iwd/* ${TARGET_DIR}/var/lib/iwd
 fi
 
 CONFIG_SCRIPT_SHORT=`basename "$CONFIG_SCRIPT"`
@@ -92,6 +94,7 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   echo ">>>> install-base.sh: Installing basic packages.."
   pacman -S --noconfirm gptfdisk
   pacman -S --noconfirm reflector
+  pacman -S --noconfirm lsof
   pacman -S --noconfirm bash-completion
   pacman -S --noconfirm openssh
   pacman -S --noconfirm rsync
@@ -102,6 +105,9 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   pacman -S --noconfirm libpwquality
   pacman -S --noconfirm rkhunter
   pacman -S --noconfirm arch-audit
+  pacman -S --noconfirm man-db
+  pacman -S --noconfirm mlocate
+  pacman -S --noconfirm pacman-contrib
   pacman -S --noconfirm ${ADDITIONAL_PKGS}
 
   if [ "${IS_UEFI}" != "false" ] ; then
