@@ -13,8 +13,8 @@ ADDITIONAL_PKGS=${ADDITIONAL_PKGS:-"vim python python-cryptography"}
 ANSIBLE_LOGIN=${ANSIBLE_LOGIN:-"ansible"}
 ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible_P1"}
 
-echo ">>>>>>>>>>>>>>>> ${COUNTRY}"
 echo ">>>>>>>>>>>>>>>> ${HOSTNAME}"
+echo ">>>>>>>>>>>>>>>> ${COUNTRIES}"
 echo ">>>>>>>>>>>>>>>> ${KEYMAP}"
 echo ">>>>>>>>>>>>>>>> ${LANGUAGE}"
 echo ">>>>>>>>>>>>>>>> $WITH_WIFI"
@@ -57,6 +57,7 @@ echo ">>>> install-base.sh: Generating the system configuration script.."
 # #######################################
 echo ">>>> install-base.sh: Install ansible tmp key file.."
 /usr/bin/install --mode=0644 /root/.ssh/authorized_keys "${TARGET_DIR}/ansible.pub"
+/usr/bin/install --mode=0600 /root/private.tgz.enc "${TARGET_DIR}/private.tgz.enc"
 
 echo ">>>> install-base.sh: Install netplan "
 mkdir -p "${TARGET_DIR}/etc/netplan"
@@ -108,6 +109,7 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   pacman -S --noconfirm man-db
   pacman -S --noconfirm mlocate
   pacman -S --noconfirm pacman-contrib
+  pacman -S --noconfirm ansible
   pacman -S --noconfirm ${ADDITIONAL_PKGS}
 
   if [ "${IS_UEFI}" != "false" ] ; then
@@ -226,7 +228,17 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring ssh access for ${ANSIBLE_LOGIN}.."
   /usr/bin/install --directory --owner=${ANSIBLE_LOGIN} --group=${ANSIBLE_LOGIN} --mode=0700 /home/${ANSIBLE_LOGIN}/.ssh
   /usr/bin/install --owner=${ANSIBLE_LOGIN} --group=${ANSIBLE_LOGIN} --mode=0600 /ansible.pub /home/${ANSIBLE_LOGIN}/.ssh/authorized_keys
+  /usr/bin/install --owner=${ANSIBLE_LOGIN} --group=${ANSIBLE_LOGIN} --mode=0600 /private.tgz.enc /home/${ANSIBLE_LOGIN}/private.tgz.enc
   rm /ansible.pub
+  rm /private.tgz.enc
+
+# #######################################
+# ansible
+# #######################################
+
+chmod 740 /etc/ansible
+chown ${ANSIBLE_LOGIN}:root /etc/ansible
+
 
 # #######################################
 # grub
