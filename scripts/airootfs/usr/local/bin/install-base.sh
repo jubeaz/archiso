@@ -12,6 +12,7 @@ COUNTRIES=${COUNTRIES:-France,Germany}
 ADDITIONAL_PKGS=${ADDITIONAL_PKGS:-"vim python python-cryptography"}
 ANSIBLE_LOGIN=${ANSIBLE_LOGIN:-"ansible"}
 ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible_P1"}
+IS_CRYPTED=${IS_CRYPTED:-"false"}
 
 echo ">>>>>>>>>>>>>>>> ${HOSTNAME}"
 echo ">>>>>>>>>>>>>>>> ${COUNTRIES}"
@@ -22,6 +23,7 @@ echo ">>>>>>>>>>>>>>>> $ADDITIONAL_PKGS"
 echo ">>>>>>>>>>>>>>>> $IS_UEFI"
 echo ">>>>>>>>>>>>>>>> $GRUB_PART"
 echo ">>>>>>>>>>>>>>>> $IS_UEFI_REMOVABLE"
+echo ">>>>>>>>>>>>>>>> $IS_ENCRYPTED"
 
 TIMEZONE='UTC'
 CONFIG_SCRIPT='/usr/local/bin/arch-config.sh'
@@ -83,7 +85,11 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   /usr/bin/locale-gen
 
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: add lvm2 for initramfs.."
-  /usr/bin/sed -i 's/block filesystems/block lvm2 filesystems/' /etc/mkinitcpio.conf
+  if [ "${IS_ENCRYPTED}" != "false" ] ; then
+    /usr/bin/sed -i 's/block filesystems/block encrypt lvm2 filesystems/' /etc/mkinitcpio.conf
+  else
+    /usr/bin/sed -i 's/block filesystems/block lvm2 filesystems/' /etc/mkinitcpio.conf
+  fi
 
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Creating initramfs.."
   /usr/bin/mkinitcpio -p linux-lts
@@ -246,11 +252,17 @@ chown ${ANSIBLE_LOGIN}:root /etc/ansible
 
   # allways run GRUB_CMDLINE_LINUX
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: setting grub kernel boot params"
-  /usr/bin/sed -i  's/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"/' /etc/default/grub
 
+  if [ "${IS_ENCRYPTED}" != "false" ] ; then
+     ENCRYPT_UUID=$(blkid | grep ${ENCRYPT_PART} | cut -d'"' -f 2)
+     CMD_LINE_STR=" net.ifnames=0 biosdevname=0 cryptdevice=UUID=device-${ENCRYPT_UUID}:cryptlvm root=/dev/${ENCRYPT_VG}/${ENCRYPT_LV_ROOT}"
+  fi
+
+  G_CMDLINE_STR="net.ifnames=0 biosdevname=0"
+  #/usr/bin/sed -i  's/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"/' /etc/default/grub
+  /usr/bin/sed -i  's/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="'${CMD_LINE_STR}'"/' /etc/default/grub
   # do not run in recovery GRUB_CMDLINE_LINUX_DEFAULT
-  /usr/bin/sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 ipv6.dsiable=1 lsm=landlock,lockdown,yama,apparmor,bpf"/' /etc/default/grub
-  #/usr/bin/sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet splash ipv6.dsiable=1 lsm=landlock,lockdown,yama,apparmor,bpf"/' /etc/default/grub
+  /usr/bin/sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 ipv6.disable=1 lsm=landlock,lockdown,yama,apparmor,bpf"/' /etc/default/grub
 
   if [ "${IS_UEFI}" != "false" ] ; then
     mkdir -p /boot/efi
