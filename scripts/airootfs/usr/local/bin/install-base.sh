@@ -99,35 +99,17 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
 # #######################################
 # packages
 # #######################################
-  echo ">>>> install-base.sh: Installing basic packages.."
-  pacman -S --noconfirm gptfdisk
-  pacman -S --noconfirm reflector
-  pacman -S --noconfirm lsof
-  pacman -S --noconfirm bash-completion
-  pacman -S --noconfirm openssh
-  pacman -S --noconfirm rsync
-  pacman -S --noconfirm netplan
-  pacman -S --noconfirm ufw
-  pacman -S --noconfirm apparmor
-  pacman -S --noconfirm firejail
-  pacman -S --noconfirm libpwquality
-  pacman -S --noconfirm rkhunter
-  pacman -S --noconfirm arch-audit
-  pacman -S --noconfirm man-db
-  pacman -S --noconfirm mlocate
-  pacman -S --noconfirm pacman-contrib
-  pacman -S --noconfirm ansible
-  pacman -S --noconfirm ${ADDITIONAL_PKGS}
-
-  if [ "${IS_UEFI}" != "false" ] ; then
-    pacman -S --noconfirm grub efibootmgr dosfstools os-prober mtools
-  else
-    pacman -S --noconfirm grub dosfstools os-prober mtools
-  fi
+  BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync netplan ufw apparmor firejail libpwquality rkhunter arch-audit man-db mlocate pacman-contrib ansible"
   if [ "${WITH_WIFI}" == "true" ] ; then
-    pacman -S --noconfirm iwd
-    pacman -S --noconfirm wireless_tools
+    BASE_PKGS="${BASE_PKGS} iwd wireless_tools"
   fi
+  GRUB_PKGS="grub dosfstools os-prober mtools"
+  if [ "${IS_UEFI}" != "false" ] ; then
+    GRUB_PKGS="${GRUB_PKGS} efibootmgr"
+  fi
+  
+  echo ">>>> install-base.sh: Installing basic packages.."
+  pacman -S --noconfirm ${BASE_PKGS} ${GRUB_PKGS} ${ADDITIONAL_PKGS}
 
 # #######################################
 # network
@@ -172,7 +154,6 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   /usr/bin/systemctl enable sshd.service
 
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Adding workaround for sshd connection issue after reboot.."
-  /usr/bin/pacman -S --noconfirm rng-tools
   /usr/bin/systemctl enable rngd
 
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: regen ssh host keys."
@@ -289,9 +270,6 @@ chown ${ANSIBLE_LOGIN}:root /etc/ansible
 # #######################################
 #
 # #######################################
-
-#  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Cleaning up.."
-#  /usr/bin/pacman -Rcns --noconfirm gptfdisk
 EOF
 
 echo ">>>> install-base.sh: Entering chroot and configuring system.."
