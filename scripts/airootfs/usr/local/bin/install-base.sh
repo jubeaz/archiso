@@ -4,7 +4,7 @@
 set -eu
 HOSTNAME=""
 
-. /root/secrets.sh --${HOSTNAME}
+. /root/private/secrets.sh --${HOSTNAME}
 DOMAINE_NAME=${DOMAINE_NAME:-"local"}
 KEYMAP=${KEYMAP:-'fr-latin1'}
 LANGUAGE=${LANGUAGE:-'en_US.UTF-8'}
@@ -13,6 +13,19 @@ ADDITIONAL_PKGS=${ADDITIONAL_PKGS:-"vim python python-cryptography"}
 ANSIBLE_LOGIN=${ANSIBLE_LOGIN:-"ansible"}
 ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible_P1"}
 IS_CRYPTED=${IS_CRYPTED:-"false"}
+BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync netplan ufw apparmor firejail libpwquality rkhunter arch-audit man-db mlocate pacman-contrib ansible"
+if [ "${WITH_WIFI}" == "true" ] ; then
+  BASE_PKGS="${BASE_PKGS} iwd wireless_tools"
+fi
+GRUB_PKGS="grub dosfstools os-prober mtools"
+if [ "${IS_UEFI}" != "false" ] ; then
+  GRUB_PKGS="${GRUB_PKGS} efibootmgr"
+fi
+GRUB_CMDLINE_STR="net.ifnames=0 biosdevname=0"
+if [ "${IS_ENCRYPTED}" != "false" ] ; then
+   ENCRYPT_UUID=$(blkid | grep ${ENCRYPT_PART} | cut -d'"' -f 2)
+   CMD_LINE_STR="net.ifnames=0 biosdevname=0 cryptdevice=UUID=${ENCRYPT_UUID}:cryptlvm root=/dev/${ENCRYPT_VG}/${ENCRYPT_LV_ROOT} cryptkey=rootfs:/root/secrets/cryptlvm.keyfile"
+fi
 
 echo ">>>>>>>>>>>>>>>> ${HOSTNAME}"
 echo ">>>>>>>>>>>>>>>> ${COUNTRIES}"
@@ -62,7 +75,7 @@ echo ">>>> install-base.sh: Install ansible tmp key file.."
 
 echo ">>>> install-base.sh: Install netplan "
 mkdir -p "${TARGET_DIR}/etc/netplan"
-/usr/bin/install --mode=0644 "/root/${HOSTNAME}.yaml" "${TARGET_DIR}/etc/netplan/${HOSTNAME}.yaml"
+/usr/bin/install --mode=0644 "/root/private/${HOSTNAME}.yaml" "${TARGET_DIR}/etc/netplan/${HOSTNAME}.yaml"
 
 if [ "${WITH_WIFI}" == "true" ] ; then
   echo ">>>> install-base.sh: copy wifi networks"
@@ -82,10 +95,15 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring locale.."
   /usr/bin/sed -i 's/#${LANGUAGE}/${LANGUAGE}/' /etc/locale.gen
   /usr/bin/locale-gen
-
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: add lvm2 for initramfs.."
   if [ "${IS_ENCRYPTED}" != "false" ] ; then
+    mkdir /root/secrets
+    dd bs=512 count=4 if=/dev/random of=/root/secrets/cryptlvm.keyfile iflag=fullblock
+    chmod 600 /root/secrets/cryptlvm.keyfile
+    cryptsetup -v luksAddKey ${ENCRYPT_PART} /root/secrets/cryptlvm.keyfile
     /usr/bin/sed -i 's/block filesystems/block encrypt lvm2 filesystems/' /etc/mkinitcpio.conf
+    /usr/bin/sed -i 's/FILES=(.*/FILES=(/root/secrets/cryptlvm.keyfile)/' /etc/mkinitcpio.conf
+
   else
     /usr/bin/sed -i 's/block filesystems/block lvm2 filesystems/' /etc/mkinitcpio.conf
   fi
@@ -97,14 +115,7 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
 # #######################################
 # packages
 # #######################################
-  BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync netplan ufw apparmor firejail libpwquality rkhunter arch-audit man-db mlocate pacman-contrib ansible"
-  if [ "${WITH_WIFI}" == "true" ] ; then
-    BASE_PKGS="${BASE_PKGS} iwd wireless_tools"
-  fi
-  GRUB_PKGS="grub dosfstools os-prober mtools"
-  if [ "${IS_UEFI}" != "false" ] ; then
-    GRUB_PKGS="${GRUB_PKGS} efibootmgr"
-  fi
+
   
   echo ">>>> install-base.sh: Installing basic packages.."
   pacman -S --noconfirm ${BASE_PKGS} ${GRUB_PKGS} ${ADDITIONAL_PKGS}
@@ -198,7 +209,7 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   echo "blacklist tipc" >> /etc/modprobe.d/local-dontload.conf
   echo "install tipc /bin/true" >> /etc/modprobe.d/local-dontload.conf
 
-  rkhunter --propupd
+#  rkhunter --propupd
   
 # #######################################
 # Ansible user
@@ -233,13 +244,10 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: setting grub kernel boot params"
 
   if [ "${IS_ENCRYPTED}" != "false" ] ; then
-     ENCRYPT_UUID=$(blkid | grep ${ENCRYPT_PART} | cut -d'"' -f 2)
-     CMD_LINE_STR=" net.ifnames=0 biosdevname=0 cryptdevice=UUID=device-${ENCRYPT_UUID}:cryptlvm root=/dev/${ENCRYPT_VG}/${ENCRYPT_LV_ROOT}"
+    /usr/bin/sed -i 's/#GRUB_ENABLE_CRYPTODISK=y/GRUB_ENABLE_CRYPTODISK=y/'  /etc/default/grub
   fi
-
-  G_CMDLINE_STR="net.ifnames=0 biosdevname=0"
-  #/usr/bin/sed -i  's/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"/' /etc/default/grub
-  /usr/bin/sed -i  's/GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="'${CMD_LINE_STR}'"/' /etc/default/grub
+  /usr/bin/sed -i  '/GRUB_CMDLINE_LINUX=.*/d' /etc/default/grub
+  echo 'GRUB_CMDLINE_LINUX="'${CMD_LINE_STR}'"'  >> /etc/default/grub
   # do not run in recovery GRUB_CMDLINE_LINUX_DEFAULT
   /usr/bin/sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 ipv6.disable=1 lsm=landlock,lockdown,yama,apparmor,bpf"/' /etc/default/grub
 
@@ -262,6 +270,7 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
     cp /usr/share/locale/en\@quot/LC_MESSAGES/grub.mo /boot/grub/locale/en.mo
     grub-mkconfig -o /boot/grub/grub.cfg
   fi
+  chmod 700 /boot
 # #######################################
 #
 # #######################################
