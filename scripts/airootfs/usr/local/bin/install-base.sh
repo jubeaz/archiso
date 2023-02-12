@@ -102,7 +102,7 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
     chmod 600 /root/secrets/cryptlvm.keyfile
     cryptsetup -v luksAddKey ${ENCRYPT_PART} /root/secrets/cryptlvm.keyfile
     /usr/bin/sed -i 's/block filesystems/block encrypt lvm2 filesystems/' /etc/mkinitcpio.conf
-    /usr/bin/sed -i 's/FILES=(.*/FILES=(/root/secrets/cryptlvm.keyfile)/' /etc/mkinitcpio.conf
+    /usr/bin/sed -i 's|FILES=(.*|FILES=(/root/secrets/cryptlvm.keyfile)|' /etc/mkinitcpio.conf
 
   else
     /usr/bin/sed -i 's/block filesystems/block lvm2 filesystems/' /etc/mkinitcpio.conf
@@ -234,6 +234,12 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   git -C /etc clone  https://github.com/jubeaz/jubeaz_recovery.git ansible
   chmod 740 /etc/ansible
   chown --recursive ${ANSIBLE_LOGIN}:root /etc/ansible
+  rm -rf /home/${ANSIBLE_LOGIN}/.bash*
+  /usr/bin/git clone --bare https://github.com/jubeaz/dotfiles.git /home/${ANSIBLE_LOGIN}/.dotfiles
+  /usr/bin/git --git-dir=/home/${ANSIBLE_LOGIN}/.dotfiles/ --work-tree=/home/${ANSIBLE_LOGIN} checkout
+  
+  chown --recursive ${ANSIBLE_LOGIN}:${ANSIBLE_LOGIN} /home/$ANSIBLE_LOGIN}/.[a-z]*
+
 
 
 # #######################################
