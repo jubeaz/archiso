@@ -7,12 +7,12 @@ clean:
 	sudo rm -rf test
 	rm -rf releng
 	rm -f ./scripts/airootfs/root/private.tgz.enc
-	rm -f ./scripts/airootfs/var/lib/iwd/wifi.psk
+	rm -f ./scripts/airootfs/var/lib/iwd/*.psk
 
 build:
 	cp -r /usr/share/archiso/configs/releng .
 	cp ./private.tgz.enc  ./scripts/airootfs/root/private.tgz.enc
-	cp ./private/wifi.psk  ./scripts/airootfs/var/lib/iwd/wifi.psk
+	cp ./private/*.psk  ./scripts/airootfs/var/lib/iwd/
 	cp -r scripts/* releng
 	sudo mkarchiso -v -o test releng
 burn:
