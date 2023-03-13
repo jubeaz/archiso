@@ -13,19 +13,34 @@ ADDITIONAL_PKGS=${ADDITIONAL_PKGS:-"vim python python-cryptography"}
 ANSIBLE_LOGIN=${ANSIBLE_LOGIN:-"ansible"}
 ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible_P1"}
 IS_CRYPTED=${IS_CRYPTED:-"false"}
+HAS_SWAP=${HAS_SWAP:-"false"}
+SWAP_LV=${SWAP_LV:-"false"}
+
+
 BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync netplan ufw apparmor firejail libpwquality rkhunter arch-audit man-db mlocate pacman-contrib ansible"
+
 if [ "${WITH_WIFI}" == "true" ] ; then
   BASE_PKGS="${BASE_PKGS} iwd wireless_tools"
 fi
+
 GRUB_PKGS="grub dosfstools os-prober mtools"
 if [ "${IS_UEFI}" != "false" ] ; then
   GRUB_PKGS="${GRUB_PKGS} efibootmgr"
 fi
-GRUB_CMDLINE_STR="net.ifnames=0 biosdevname=0"
+
+CMD_LINE_ENCRYPT=""
 if [ "${IS_ENCRYPTED}" != "false" ] ; then
    ENCRYPT_UUID=$(blkid | grep ${ENCRYPT_PART} | cut -d'"' -f 2)
-   CMD_LINE_STR="net.ifnames=0 biosdevname=0 cryptdevice=UUID=${ENCRYPT_UUID}:cryptlvm root=/dev/${ENCRYPT_VG}/${ENCRYPT_LV_ROOT} cryptkey=rootfs:/root/secrets/cryptlvm.keyfile"
+   CMD_LINE_ENCRYPT="cryptdevice=UUID=${ENCRYPT_UUID}:cryptlvm root=/dev/${ENCRYPT_VG}/${ENCRYPT_LV_ROOT} cryptkey=rootfs:/root/secrets/cryptlvm.keyfile"
 fi
+
+CMD_LINE_SWAP=""
+if [ "${HAS_SWAP}" != "false" ] ; then
+   SWAP_UUID=$(blkid | grep ${SWAP_LV} | cut -d'"' -f 2)
+   CMD_LINE_SWAP="resume=UUID=${SWAP_UUID}"
+fi
+
+CMDLINE_STR="net.ifnames=0 biosdevname=0 ${CMD_LINE_ENCRYPT} ${CMD_LINE_SWAP}"
 
 echo ">>>>>>>>>>>>>>>> ${HOSTNAME}"
 echo ">>>>>>>>>>>>>>>> ${COUNTRIES}"
@@ -95,17 +110,23 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring locale.."
   /usr/bin/sed -i 's/#${LANGUAGE}/${LANGUAGE}/' /etc/locale.gen
   /usr/bin/locale-gen
+
+# #######################################
+# mkinitcpio.conf
+# #######################################
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: add lvm2 for initramfs.."
+  /usr/bin/sed -i 's/block filesystems/block lvm2 filesystems/' /etc/mkinitcpio.conf
+  if [ "${HAS_SWAP}" != "false" ] ; then
+    /usr/bin/sed -i 's/lvm2 filesystems/lvm2 resume filesystems/' /etc/mkinitcpio.conf
+  fi
   if [ "${IS_ENCRYPTED}" != "false" ] ; then
+    echo ">>>> ${CONFIG_SCRIPT_SHORT}: add encrypt for initramfs.."
     mkdir /root/secrets
     dd bs=512 count=4 if=/dev/random of=/root/secrets/cryptlvm.keyfile iflag=fullblock
     chmod 600 /root/secrets/cryptlvm.keyfile
     cryptsetup -v luksAddKey ${ENCRYPT_PART} /root/secrets/cryptlvm.keyfile
-    /usr/bin/sed -i 's/block filesystems/block encrypt lvm2 filesystems/' /etc/mkinitcpio.conf
+    /usr/bin/sed -i 's/block lvm2/block encrypt lvm2/' /etc/mkinitcpio.conf
     /usr/bin/sed -i 's|FILES=(.*|FILES=(/root/secrets/cryptlvm.keyfile)|' /etc/mkinitcpio.conf
-
-  else
-    /usr/bin/sed -i 's/block filesystems/block lvm2 filesystems/' /etc/mkinitcpio.conf
   fi
 
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Creating initramfs.."
@@ -246,7 +267,7 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
 # grub
 # #######################################
 
-  # allways run GRUB_CMDLINE_LINUX
+  # GRUB_CMDLINE_LINUX (params always add) 
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: setting grub kernel boot params"
 
   if [ "${IS_ENCRYPTED}" != "false" ] ; then
@@ -254,7 +275,8 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   fi
   /usr/bin/sed -i  '/GRUB_CMDLINE_LINUX=.*/d' /etc/default/grub
   echo 'GRUB_CMDLINE_LINUX="'${CMD_LINE_STR}'"'  >> /etc/default/grub
-  # do not run in recovery GRUB_CMDLINE_LINUX_DEFAULT
+
+  # GRUB_CMDLINE_LINUX_DEFAULT (params added in normal mode only)
   /usr/bin/sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 ipv6.disable=1 lsm=landlock,lockdown,yama,apparmor,bpf"/' /etc/default/grub
 
   if [ "${IS_UEFI}" != "false" ] ; then
