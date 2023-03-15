@@ -40,7 +40,7 @@ if [ "${HAS_SWAP}" != "false" ] ; then
    CMD_LINE_SWAP="resume=UUID=${SWAP_UUID}"
 fi
 
-CMDLINE_STR="net.ifnames=0 biosdevname=0 ${CMD_LINE_ENCRYPT} ${CMD_LINE_SWAP}"
+CMD_LINE_STR="net.ifnames=0 biosdevname=0 ${CMD_LINE_ENCRYPT} ${CMD_LINE_SWAP}"
 
 echo ">>>>>>>>>>>>>>>> ${HOSTNAME}"
 echo ">>>>>>>>>>>>>>>> ${COUNTRIES}"
@@ -154,7 +154,7 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   fi
 
   netplan generate
-  netplan appy
+  netplan apply
 
   /usr/bin/systemctl enable systemd-networkd
   /usr/bin/systemctl enable systemd-resolved
