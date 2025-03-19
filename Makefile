@@ -16,5 +16,5 @@ build:
 	cp -r scripts/* releng
 	sudo mkarchiso -v -o test releng
 burn:
-	dd bs=4M if=./test/archlinux-2023.02.12-x86_64.iso of=/dev/sdc conv=fsync oflag=direct status=progress
+	dd bs=4M if=./test/$(ISO)  of=/dev/$(DEVICE) conv=fsync oflag=direct status=progress
 

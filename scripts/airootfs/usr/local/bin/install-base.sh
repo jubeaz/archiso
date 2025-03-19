@@ -2,22 +2,29 @@
 
 # stop on errors
 set -eu
-HOSTNAME=""
 
-. /root/private/secrets.sh --${HOSTNAME}
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <computer_name>"
+    exit 1
+fi
+
+HOSTNAME=$1
+
+. /root/private/prepare.sh --${HOSTNAME}
 DOMAINE_NAME=${DOMAINE_NAME:-"local"}
-KEYMAP=${KEYMAP:-'fr-latin1'}
+KEYMAP=${KEYMAP:-'fr'}
 LANGUAGE=${LANGUAGE:-'en_US.UTF-8'}
 COUNTRIES=${COUNTRIES:-France,Germany}
 ADDITIONAL_PKGS=${ADDITIONAL_PKGS:-"vim python python-cryptography"}
 ANSIBLE_LOGIN=${ANSIBLE_LOGIN:-"ansible"}
 ANSIBLE_PASSWORD=${ANSIBLE_PASSWORD:-"ansible_P1"}
-IS_CRYPTED=${IS_CRYPTED:-"false"}
+IS_ENCRYPTED=${IS_ENCRYPTED:-"false"}
 HAS_SWAP=${HAS_SWAP:-"false"}
 SWAP_LV=${SWAP_LV:-"false"}
+ENCRYPT_PART=${ENCRYPT_PART:-"false"}
 
 
-BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync netplan ufw apparmor firejail libpwquality rkhunter arch-audit man-db mlocate pacman-contrib ansible"
+BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync ufw apparmor firejail libpwquality rkhunter arch-audit man-db mlocate pacman-contrib ansible"
 
 if [ "${WITH_WIFI}" == "true" ] ; then
   BASE_PKGS="${BASE_PKGS} iwd wireless_tools"
@@ -28,30 +35,40 @@ if [ "${IS_UEFI}" != "false" ] ; then
   GRUB_PKGS="${GRUB_PKGS} efibootmgr"
 fi
 
-CMD_LINE_ENCRYPT=""
+ENCRYPT_CMD_LINE_STR=""
 if [ "${IS_ENCRYPTED}" != "false" ] ; then
    ENCRYPT_UUID=$(blkid | grep ${ENCRYPT_PART} | cut -d'"' -f 2)
-   CMD_LINE_ENCRYPT="cryptdevice=UUID=${ENCRYPT_UUID}:cryptlvm root=/dev/${ENCRYPT_VG}/${ENCRYPT_LV_ROOT} cryptkey=rootfs:/root/secrets/cryptlvm.keyfile"
+   ENCRYPT_CMD_LINE_STR="cryptdevice=UUID=${ENCRYPT_UUID}:cryptlvm root=/dev/${ENCRYPT_VG}/${ENCRYPT_LV_ROOT} cryptkey=rootfs:/root/secrets/cryptlvm.keyfile"
 fi
 
-CMD_LINE_SWAP=""
+SWAP_CMD_LINE_STR=""
 if [ "${HAS_SWAP}" != "false" ] ; then
    SWAP_UUID=$(blkid | grep ${SWAP_LV} | cut -d'"' -f 2)
-   CMD_LINE_SWAP="resume=UUID=${SWAP_UUID}"
+   SWAP_CMD_LINE_STR="resume=UUID=${SWAP_UUID}"
 fi
 
-CMD_LINE_STR="net.ifnames=0 biosdevname=0 ${CMD_LINE_ENCRYPT} ${CMD_LINE_SWAP}"
+GRUB_CMD_LINE_STR="net.ifnames=0 biosdevname=0 ${ENCRYPT_CMD_LINE_STR} ${SWAP_CMD_LINE_STR}"
 
-echo ">>>>>>>>>>>>>>>> ${HOSTNAME}"
-echo ">>>>>>>>>>>>>>>> ${COUNTRIES}"
-echo ">>>>>>>>>>>>>>>> ${KEYMAP}"
-echo ">>>>>>>>>>>>>>>> ${LANGUAGE}"
-echo ">>>>>>>>>>>>>>>> $WITH_WIFI"
-echo ">>>>>>>>>>>>>>>> $ADDITIONAL_PKGS"
-echo ">>>>>>>>>>>>>>>> $IS_UEFI"
-echo ">>>>>>>>>>>>>>>> $GRUB_PART"
-echo ">>>>>>>>>>>>>>>> $IS_UEFI_REMOVABLE"
-echo ">>>>>>>>>>>>>>>> $IS_ENCRYPTED"
+echo ">>>>>>>>>>>>>>>> HOSTNAME: ${HOSTNAME}"
+echo ">>>>>>>>>>>>>>>> DOMAINE_NAME: ${DOMAINE_NAME}"
+echo ">>>>>>>>>>>>>>>> KEYMAP: ${KEYMAP}"
+echo ">>>>>>>>>>>>>>>> LANGUAGE: ${LANGUAGE}"
+echo ">>>>>>>>>>>>>>>> COUNTRIES: ${COUNTRIES}"
+echo ">>>>>>>>>>>>>>>> ANSIBLE_LOGIN: $ANSIBLE_LOGIN"
+echo ">>>>>>>>>>>>>>>> ANSIBLE_PASSWORD: $ANSIBLE_PASSWORD"
+echo ">>>>>>>>>>>>>>>> WITH_WIFI: $WITH_WIFI"
+echo ">>>>>>>>>>>>>>>> IS_UEFI: $IS_UEFI"
+echo ">>>>>>>>>>>>>>>> IS_UEFI_REMOVABLE: $IS_UEFI_REMOVABLE"
+echo ">>>>>>>>>>>>>>>> IS_ENCRYPTED: $IS_ENCRYPTED"
+echo ">>>>>>>>>>>>>>>> ENCRYPT_CMD_LINE_STR: $ENCRYPT_CMD_LINE_STR"
+echo ">>>>>>>>>>>>>>>> GRUB_PART: $GRUB_PART"
+echo ">>>>>>>>>>>>>>>> GRUB_CMD_LINE_STR: $GRUB_CMD_LINE_STR"
+echo ">>>>>>>>>>>>>>>> HAS_SWAP: $HAS_SWAP"
+echo ">>>>>>>>>>>>>>>> SWAP_LV: $SWAP_LV"
+echo ">>>>>>>>>>>>>>>> SWAP_CMD_LINE_STR: $SWAP_CMD_LINE_STR"
+echo ">>>>>>>>>>>>>>>> BASE_PKGS: $BASE_PKGS"
+echo ">>>>>>>>>>>>>>>> ADDITIONAL_PKGS: $ADDITIONAL_PKGS"
+echo ">>>>>>>>>>>>>>>> GRUB_PKGS: $GRUB_PKGS"
 
 TIMEZONE='UTC'
 CONFIG_SCRIPT='/usr/local/bin/arch-config.sh'
@@ -88,9 +105,10 @@ echo ">>>> install-base.sh: Generating the system configuration script.."
 echo ">>>> install-base.sh: Install ansible tmp key file.."
 /usr/bin/install --mode=0644 /root/.ssh/authorized_keys "${TARGET_DIR}/ansible.pub"
 
-echo ">>>> install-base.sh: Install netplan "
-mkdir -p "${TARGET_DIR}/etc/netplan"
-/usr/bin/install --mode=0644 "/root/private/${HOSTNAME}.yaml" "${TARGET_DIR}/etc/netplan/${HOSTNAME}.yaml"
+mkdir -p "${TARGET_DIR}/etc/systemd/network"
+/usr/bin/install --mode=0644 "/root/private/${HOSTNAME}-br0.network" "${TARGET_DIR}/etc/systemd/network/br0.network"
+/usr/bin/install --mode=0644 "/root/private/br0.netdev" "${TARGET_DIR}/etc/systemd/network/br0.netdev"
+/usr/bin/install --mode=0644 "/root/private/br0-bind.network" "${TARGET_DIR}//etc/systemd/network/br0-bind.network"
 
 if [ "${WITH_WIFI}" == "true" ] ; then
   echo ">>>> install-base.sh: copy wifi networks"
@@ -152,9 +170,6 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   if [ "${WITH_WIFI}" == "true" ] ; then
     systemctl enable iwd
   fi
-
-  netplan generate
-  netplan apply
 
   /usr/bin/systemctl enable systemd-networkd
   /usr/bin/systemctl enable systemd-resolved
@@ -256,8 +271,8 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   chmod 740 /etc/ansible
   chown --recursive ${ANSIBLE_LOGIN}:root /etc/ansible
   rm -rf /home/${ANSIBLE_LOGIN}/.bash*
-  /usr/bin/git clone --bare https://github.com/jubeaz/dotfiles.git /home/${ANSIBLE_LOGIN}/.dotfiles
-  /usr/bin/git --git-dir=/home/${ANSIBLE_LOGIN}/.dotfiles/ --work-tree=/home/${ANSIBLE_LOGIN} checkout
+  sudo -u ${ANSIBLE_LOGIN} /usr/bin/git clone --bare https://github.com/jubeaz/dotfiles.git /home/${ANSIBLE_LOGIN}/.dotfiles
+  sudo -u ${ANSIBLE_LOGIN} /usr/bin/git --git-dir=/home/${ANSIBLE_LOGIN}/.dotfiles/ --work-tree=/home/${ANSIBLE_LOGIN} checkout
   
   chown --recursive ${ANSIBLE_LOGIN}:${ANSIBLE_LOGIN} /home/$ANSIBLE_LOGIN}/.[a-z]*
 
@@ -274,7 +289,7 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
     /usr/bin/sed -i 's/#GRUB_ENABLE_CRYPTODISK=y/GRUB_ENABLE_CRYPTODISK=y/'  /etc/default/grub
   fi
   /usr/bin/sed -i  '/GRUB_CMDLINE_LINUX=.*/d' /etc/default/grub
-  echo 'GRUB_CMDLINE_LINUX="'${CMD_LINE_STR}'"'  >> /etc/default/grub
+  echo 'GRUB_CMDLINE_LINUX="'${GRUB_CMD_LINE_STR}'"'  >> /etc/default/grub
 
   # GRUB_CMDLINE_LINUX_DEFAULT (params added in normal mode only)
   /usr/bin/sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 ipv6.disable=1 lsm=landlock,lockdown,yama,apparmor,bpf"/' /etc/default/grub
