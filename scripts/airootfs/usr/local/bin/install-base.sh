@@ -27,7 +27,7 @@ ENCRYPT_PART=${ENCRYPT_PART:-"false"}
 BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync ufw apparmor firejail libpwquality rkhunter arch-audit man-db mlocate pacman-contrib ansible"
 
 if [ "${WITH_WIFI}" == "true" ] ; then
-  BASE_PKGS="${BASE_PKGS} iwd wireless_tools"
+  BASE_PKGS="${BASE_PKGS} iwd wireless_tools wireless-regdb"
 fi
 
 GRUB_PKGS="grub dosfstools os-prober mtools"
@@ -317,6 +317,8 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
 # #######################################
 #
 # #######################################
+# Disable root login
+  passwd -l root
 EOF
 
 echo ">>>> install-base.sh: Entering chroot and configuring system.."
