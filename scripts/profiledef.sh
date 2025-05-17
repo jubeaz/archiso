@@ -23,6 +23,7 @@ file_permissions=(
   ["/root"]="0:0:0750"
   ["/root/private.tgz.enc"]="0:0:0600"
   ["/root/unsecret.sh"]="0:0:0744"
+  ["/root/prepare.sh"]="0:0:0744"
   ["/root/.ssh"]="0:0:0700"
   ["/root/.ssh/authorized_keys"]="0:0:0600"
   ["/var/lib/iwd"]="0:0:0700"
