@@ -18,7 +18,8 @@ build:
 	cp ./private/*.psk  ./scripts/airootfs/var/lib/iwd/
 	cp -r scripts/* releng
 	sudo mkarchiso -v -o $(OUT_DIR) releng
-	sudo chown --recursive $(LOGIN) test
+	sudo chown $(LOGIN) $(OUT_DIR)
+	sudo chown $(LOGIN) $(OUT_DIR)/$(ISO_NAME)
 	sha256sum $(OUT_DIR)/$(ISO_NAME) > $(OUT_DIR)/$(ISO_NAME).sum
 burn:
 	dd bs=4M if=$(OUT_DIR)/$(ISO_NAME)  of=/dev/$(DEVICE) conv=fsync oflag=direct status=progress

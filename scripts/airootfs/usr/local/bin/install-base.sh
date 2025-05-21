@@ -103,17 +103,17 @@ echo ">>>> install-base.sh: Generating the system configuration script.."
 #
 # #######################################
 echo ">>>> install-base.sh: Install ansible tmp key file.."
-/usr/bin/install --mode=0644 /root/.ssh/authorized_keys "${TARGET_DIR}/ansible.pub"
+/usr/bin/install --mode=0644 --group=root --owner=root /root/.ssh/authorized_keys "${TARGET_DIR}/ansible.pub"
 
 if [ -d "/root/private/systemd/network/${HOSTNAME}" ]; then
   mkdir -p "${TARGET_DIR}/etc/systemd/network"
-  cp -rf /root/private/systemd/network/${HOSTNAME}/* ${TARGET_DIR}/etc/systemd/network
+  /usr/bin/install --mode=0644 --group=root --owner=root /root/private/systemd/network/${HOSTNAME}/* ${TARGET_DIR}/etc/systemd/network
 fi
 
 if [ "${WITH_WIFI}" == "true" ] ; then
   echo ">>>> install-base.sh: copy wifi networks"
   mkdir -p ${TARGET_DIR}/var/lib/iwd
-  cp -rf /var/lib/iwd/* ${TARGET_DIR}/var/lib/iwd
+  /usr/bin/install --mode=0600 --group=root --owner=root /var/lib/iwd/* ${TARGET_DIR}/var/lib/iwd
 fi
 
 CONFIG_SCRIPT_SHORT=`basename "$CONFIG_SCRIPT"`
