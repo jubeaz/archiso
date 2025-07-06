@@ -7,7 +7,7 @@ crypt:
 	rm private.tgz
 clean:
 	sudo rm -rf work
-	sudo rm -rf test
+	sudo rm -rf $(OUT_DIR)
 	rm -rf releng
 	rm -f ./scripts/airootfs/root/private.tgz.enc
 	rm -f ./scripts/airootfs/var/lib/iwd/*.psk
@@ -21,6 +21,8 @@ build:
 	sudo chown $(LOGIN) $(OUT_DIR)
 	sudo chown $(LOGIN) $(OUT_DIR)/$(ISO_NAME)
 	sha256sum $(OUT_DIR)/$(ISO_NAME) > $(OUT_DIR)/$(ISO_NAME).sum
+	ln -s $(PWD)/$(OUT_DIR)/$(ISO_NAME) $(PWD)/$(OUT_DIR)/archlinux-x86_64.iso
+	sha256sum $(OUT_DIR)/archlinux-x86_64.iso > $(OUT_DIR)/archlinux-x86_64.iso.sum
 burn:
 	dd bs=4M if=$(OUT_DIR)/$(ISO_NAME)  of=/dev/$(DEVICE) conv=fsync oflag=direct status=progress
 
