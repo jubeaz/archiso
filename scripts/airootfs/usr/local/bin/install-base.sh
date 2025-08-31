@@ -12,7 +12,7 @@ HOSTNAME=$1
 
 . /root/prepare.sh --${HOSTNAME}
 DOMAINE_NAME=${DOMAINE_NAME:-"local"}
-KEYMAP=${KEYMAP:-'fr-latin1'}
+KEYMAP=${KEYMAP:-'fr'}
 LOCALE=${LOCALE:-'fr_FR.UTF-8'}
 COUNTRIES=${COUNTRIES:-France,Germany}
 ADDITIONAL_PKGS=${ADDITIONAL_PKGS:-""}
@@ -124,6 +124,7 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   echo '127.0.1.1   ${HOSTNAME} ${HOSTNAME}.${DOMAINE_NAME}' >> /etc/hosts
   /usr/bin/ln -s /usr/share/zoneinfo/${TIMEZONE} /etc/localtime
   echo 'KEYMAP=${KEYMAP}' > /etc/vconsole.conf
+  echo 'XKBLAYOUT=${KEYMAP}' >> /etc/vconsole.conf
 
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring locale.."
   
