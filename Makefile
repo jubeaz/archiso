@@ -1,6 +1,8 @@
 ISO_NAME := archlinux-$(shell date +%Y.%m.%d)-x86_64.iso
 LOGIN := $(shell whoami)
 OUT_DIR = test
+#decrypt:
+#	openssl enc -d -base64 -pbkdf2 -aes-256-cbc -salt  -in ./private.tgz.enc -out ./private.tgz
 crypt:
 	tar czfh ./private.tgz ./private
 	openssl enc -e -base64 -pbkdf2 -aes-256-cbc -salt  -in ./private.tgz -out ./private.tgz.enc
@@ -15,6 +17,7 @@ clean:
 build:
 	cp -r /usr/share/archiso/configs/releng .
 	cp ./private.tgz.enc  ./scripts/airootfs/root/private.tgz.enc
+	mkdir -p ./scripts/airootfs/var/lib/iwd
 	cp ./private/*.psk  ./scripts/airootfs/var/lib/iwd/
 	cp -r scripts/* releng
 	sudo mkarchiso -v -o $(OUT_DIR) releng
