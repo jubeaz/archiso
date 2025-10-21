@@ -22,6 +22,7 @@ IS_ENCRYPTED=${IS_ENCRYPTED:-"false"}
 HAS_SWAP=${HAS_SWAP:-"false"}
 SWAP_LV=${SWAP_LV:-"false"}
 ENCRYPT_PART=${ENCRYPT_PART:-"false"}
+INCLUDE_RECOVERY=${INCLUDE_RECOVERY:-"false"}
 
 
 #BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync ufw apparmor firejail libpwquality rkhunter arch-audit man-db mlocate pacman-contrib ansible"
@@ -57,6 +58,7 @@ echo ">>>>>>>>>>>>>>>> LOCALE: ${LOCALE}"
 echo ">>>>>>>>>>>>>>>> COUNTRIES: ${COUNTRIES}"
 echo ">>>>>>>>>>>>>>>> ANSIBLE_LOGIN: $ANSIBLE_LOGIN"
 echo ">>>>>>>>>>>>>>>> ANSIBLE_PASSWORD: $ANSIBLE_PASSWORD"
+echo ">>>>>>>>>>>>>>>> INCLUDE_RECOVERY: $INCLUDE_RECOVERY"
 echo ">>>>>>>>>>>>>>>> WITH_WIFI: $WITH_WIFI"
 echo ">>>>>>>>>>>>>>>> IS_UEFI: $IS_UEFI"
 echo ">>>>>>>>>>>>>>>> IS_UEFI_REMOVABLE: $IS_UEFI_REMOVABLE"
@@ -221,10 +223,12 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Creating ${ANSIBLE_LOGIN} user.."
   /usr/bin/useradd --comment '${ANSIBLE_LOGIN}' --create-home --user-group ${ANSIBLE_LOGIN}
   echo "${ANSIBLE_LOGIN}:${ANSIBLE_PASSWORD}" | /usr/bin/chpasswd
+
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring sudo.."
   echo 'Defaults env_keep += "SSH_AUTH_SOCK"' > /etc/sudoers.d/${ANSIBLE_LOGIN}
   echo '${ANSIBLE_LOGIN} ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers.d/${ANSIBLE_LOGIN}
   /usr/bin/chmod 0440 /etc/sudoers.d/${ANSIBLE_LOGIN}
+
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring ssh access for ${ANSIBLE_LOGIN}.."
   /usr/bin/install --directory --owner=${ANSIBLE_LOGIN} --group=${ANSIBLE_LOGIN} --mode=0700 /home/${ANSIBLE_LOGIN}/.ssh
   /usr/bin/install --owner=${ANSIBLE_LOGIN} --group=${ANSIBLE_LOGIN} --mode=0600 /ansible.pub /home/${ANSIBLE_LOGIN}/.ssh/authorized_keys
@@ -261,10 +265,12 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
 # #######################################
 # Ansible
 # #######################################
-  rm -rf /etc/ansible 
-  git -C /etc clone  https://github.com/jubeaz/jubeaz_recovery.git ansible
-  chmod 740 /etc/ansible
-  chown --recursive ${ANSIBLE_LOGIN}:root /etc/ansible
+  if [ "${INCLUDE_RECOVERY}" == "true" ] ; then
+    rm -rf /etc/ansible 
+    git -C /etc clone  https://github.com/jubeaz/jubeaz_recovery.git ansible
+    chmod 740 /etc/ansible
+    chown --recursive ${ANSIBLE_LOGIN}:root /etc/ansible
+  fi
   rm -rf /home/${ANSIBLE_LOGIN}/.bash*
   sudo -u ${ANSIBLE_LOGIN} /usr/bin/git clone --bare https://github.com/jubeaz/dotfiles.git /home/${ANSIBLE_LOGIN}/.dotfiles
   sudo -u ${ANSIBLE_LOGIN} /usr/bin/git --git-dir=/home/${ANSIBLE_LOGIN}/.dotfiles/ --work-tree=/home/${ANSIBLE_LOGIN} checkout
