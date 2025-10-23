@@ -11,6 +11,8 @@ fi
 HOSTNAME=$1
 
 . /root/prepare.sh --${HOSTNAME}
+
+echo ">>>> install-base.sh: Setup default variables if not exported by /prepare.sh"
 DOMAINE_NAME=${DOMAINE_NAME:-"local"}
 KEYMAP=${KEYMAP:-'fr'}
 LOCALE=${LOCALE:-'fr_FR.UTF-8'}
@@ -23,34 +25,44 @@ HAS_SWAP=${HAS_SWAP:-"false"}
 SWAP_LV=${SWAP_LV:-"false"}
 ENCRYPT_PART=${ENCRYPT_PART:-"false"}
 INCLUDE_RECOVERY=${INCLUDE_RECOVERY:-"false"}
+TIMEZONE=${TIMEZONE:-'UTC'}
+CONFIG_SCRIPT=${CONFIG_SCRIPT:-'/root/arch-config.sh'}
+TARGET_DIR=${TARGET_DIR:-'/mnt'}
 
 
 #BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync ufw apparmor firejail libpwquality rkhunter arch-audit man-db mlocate pacman-contrib ansible"
 BASE_PKGS="gptfdisk rng-tools reflector lsof bash-completion openssh rsync ufw libpwquality mlocate pacman-contrib ansible git vim python python-cryptography"
 
 if [ "${WITH_WIFI}" == "true" ] ; then
+  echo ">>>> install-base.sh: Compute wifi packages"
   BASE_PKGS="${BASE_PKGS} iwd wireless_tools wireless-regdb"
 fi
 
+echo ">>>> install-base.sh: Compute grub packages"
 GRUB_PKGS="grub dosfstools os-prober mtools"
 if [ "${IS_UEFI}" != "false" ] ; then
   GRUB_PKGS="${GRUB_PKGS} efibootmgr"
 fi
 
+# Compute GRUB command line
 ENCRYPT_CMD_LINE_STR=""
 if [ "${IS_ENCRYPTED}" != "false" ] ; then
-   ENCRYPT_UUID=$(blkid | grep ${ENCRYPT_PART} | cut -d'"' -f 2)
-   ENCRYPT_CMD_LINE_STR="cryptdevice=UUID=${ENCRYPT_UUID}:cryptlvm root=/dev/${ENCRYPT_VG}/${ENCRYPT_LV_ROOT} cryptkey=rootfs:/root/secrets/cryptlvm.keyfile"
+  echo ">>>> install-base.sh: Compute grub encrypt command line"
+  ENCRYPT_UUID=$(blkid | grep ${ENCRYPT_PART} | cut -d'"' -f 2)
+  ENCRYPT_CMD_LINE_STR="cryptdevice=UUID=${ENCRYPT_UUID}:cryptlvm root=/dev/${ENCRYPT_VG}/${ENCRYPT_LV_ROOT} cryptkey=rootfs:/root/secrets/cryptlvm.keyfile"
 fi
 
 SWAP_CMD_LINE_STR=""
 if [ "${HAS_SWAP}" != "false" ] ; then
-   SWAP_UUID=$(blkid | grep ${SWAP_LV} | cut -d'"' -f 2)
-   SWAP_CMD_LINE_STR="resume=UUID=${SWAP_UUID}"
+  echo ">>>> install-base.sh: Compute grub swap command line"
+  SWAP_UUID=$(blkid | grep ${SWAP_LV} | cut -d'"' -f 2)
+  SWAP_CMD_LINE_STR="resume=UUID=${SWAP_UUID}"
 fi
 
+echo ">>>> install-base.sh: Compute grub final command line"
 GRUB_CMD_LINE_STR="net.ifnames=0 biosdevname=0 ${ENCRYPT_CMD_LINE_STR} ${SWAP_CMD_LINE_STR}"
 
+# Display some vars
 echo ">>>>>>>>>>>>>>>> HOSTNAME: ${HOSTNAME}"
 echo ">>>>>>>>>>>>>>>> DOMAINE_NAME: ${DOMAINE_NAME}"
 echo ">>>>>>>>>>>>>>>> KEYMAP: ${KEYMAP}"
@@ -73,9 +85,7 @@ echo ">>>>>>>>>>>>>>>> BASE_PKGS: $BASE_PKGS"
 echo ">>>>>>>>>>>>>>>> ADDITIONAL_PKGS: $ADDITIONAL_PKGS"
 echo ">>>>>>>>>>>>>>>> GRUB_PKGS: $GRUB_PKGS"
 
-TIMEZONE='UTC'
-CONFIG_SCRIPT='/root/arch-config.sh'
-TARGET_DIR='/mnt'
+
 
 # #######################################
 #
@@ -83,6 +93,7 @@ TARGET_DIR='/mnt'
 #
 # #######################################
 
+# Set best pacman mirrors
 echo ">>>> install-base.sh: Setting pacman ${COUNTRIES} mirrors.."
 /usr/bin/reflector --verbose  --country ${COUNTRIES} --latest 5 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
 
@@ -99,26 +110,25 @@ echo ">>>> install-base.sh: Generating the filesystem table.."
 echo ">>>> install-base.sh: Generating the system configuration script.."
 /usr/bin/install --mode=0755 /dev/null "${TARGET_DIR}${CONFIG_SCRIPT}"
 
-# #######################################
-#
-#
-#
-# #######################################
-echo ">>>> install-base.sh: Install ansible tmp key file.."
+
+echo ">>>> install-base.sh: Install root ssh key file to be accessible to first user"
 /usr/bin/install --mode=0644 --group=root --owner=root /root/.ssh/authorized_keys "${TARGET_DIR}/ansible.pub"
 
 if [ -d "/root/private/systemd/network/${HOSTNAME}" ]; then
+  echo ">>>> install-base.sh: Install ${HOSTNAME} systemd-networkd configuration"
   mkdir -p "${TARGET_DIR}/etc/systemd/network"
   /usr/bin/install --mode=0644 --group=root --owner=root /root/private/systemd/network/${HOSTNAME}/* ${TARGET_DIR}/etc/systemd/network
 fi
 
 if [ "${WITH_WIFI}" == "true" ] ; then
-  echo ">>>> install-base.sh: copy wifi networks"
+  echo ">>>> install-base.sh: Install wifi networks"
   mkdir -p ${TARGET_DIR}/var/lib/iwd
   /usr/bin/install --mode=0600 --group=root --owner=root /var/lib/iwd/* ${TARGET_DIR}/var/lib/iwd
 fi
 
 CONFIG_SCRIPT_SHORT=`basename "$CONFIG_SCRIPT"`
+# 
+echo ">>>> install-base.sh: Create setup script file"
 cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring hostname, timezone, and keymap.."
   echo '${HOSTNAME}' > /etc/hostname
@@ -129,7 +139,6 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
   echo 'XKBLAYOUT=${KEYMAP}' >> /etc/vconsole.conf
 
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring locale.."
-  
   /usr/bin/sed -i '/^#\s*en_US.UTF-8 UTF-8/s/^#\s*//' /etc/locale.gen
   /usr/bin/sed -i "/^#${LOCALE}/s/^#\s*//" /etc/locale.gen
   /usr/bin/locale-gen
@@ -212,8 +221,7 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
 # #######################################
 # ufw
 # #######################################
-
-  systemctl enable ufw
+  #systemctl enable ufw
 
   
 # #######################################
@@ -224,15 +232,22 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   /usr/bin/useradd --comment '${ANSIBLE_LOGIN}' --create-home --user-group ${ANSIBLE_LOGIN}
   echo "${ANSIBLE_LOGIN}:${ANSIBLE_PASSWORD}" | /usr/bin/chpasswd
 
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring sudo.."
+  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Setup sudo.."
   echo 'Defaults env_keep += "SSH_AUTH_SOCK"' > /etc/sudoers.d/${ANSIBLE_LOGIN}
   echo '${ANSIBLE_LOGIN} ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers.d/${ANSIBLE_LOGIN}
   /usr/bin/chmod 0440 /etc/sudoers.d/${ANSIBLE_LOGIN}
 
-  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Configuring ssh access for ${ANSIBLE_LOGIN}.."
+  echo ">>>> ${CONFIG_SCRIPT_SHORT}: Setup ssh key for ${ANSIBLE_LOGIN}.."
   /usr/bin/install --directory --owner=${ANSIBLE_LOGIN} --group=${ANSIBLE_LOGIN} --mode=0700 /home/${ANSIBLE_LOGIN}/.ssh
   /usr/bin/install --owner=${ANSIBLE_LOGIN} --group=${ANSIBLE_LOGIN} --mode=0600 /ansible.pub /home/${ANSIBLE_LOGIN}/.ssh/authorized_keys
   rm /ansible.pub
+
+   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Setup dotfiles for ${ANSIBLE_LOGIN}.."
+  rm -rf /home/${ANSIBLE_LOGIN}/.bash*
+  sudo -u ${ANSIBLE_LOGIN} /usr/bin/git clone --bare https://github.com/jubeaz/dotfiles.git /home/${ANSIBLE_LOGIN}/.dotfiles
+  sudo -u ${ANSIBLE_LOGIN} /usr/bin/git --git-dir=/home/${ANSIBLE_LOGIN}/.dotfiles/ --work-tree=/home/${ANSIBLE_LOGIN} checkout
+  
+  chown --recursive ${ANSIBLE_LOGIN}:${ANSIBLE_LOGIN} /home/$ANSIBLE_LOGIN}/.[a-z]*
 
 # #######################################
 # Hardening
@@ -266,16 +281,12 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
 # Ansible
 # #######################################
   if [ "${INCLUDE_RECOVERY}" == "true" ] ; then
+
     rm -rf /etc/ansible 
     git -C /etc clone  https://github.com/jubeaz/jubeaz_recovery.git ansible
     chmod 740 /etc/ansible
     chown --recursive ${ANSIBLE_LOGIN}:root /etc/ansible
   fi
-  rm -rf /home/${ANSIBLE_LOGIN}/.bash*
-  sudo -u ${ANSIBLE_LOGIN} /usr/bin/git clone --bare https://github.com/jubeaz/dotfiles.git /home/${ANSIBLE_LOGIN}/.dotfiles
-  sudo -u ${ANSIBLE_LOGIN} /usr/bin/git --git-dir=/home/${ANSIBLE_LOGIN}/.dotfiles/ --work-tree=/home/${ANSIBLE_LOGIN} checkout
-  
-  chown --recursive ${ANSIBLE_LOGIN}:${ANSIBLE_LOGIN} /home/$ANSIBLE_LOGIN}/.[a-z]*
 
 # #######################################
 # grub
@@ -327,6 +338,7 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
 EOF
 
 echo ">>>> install-base.sh: Entering chroot and configuring system.."
+chmod +x ${TARGET_DIR}/${CONFIG_SCRIPT}
 /usr/bin/arch-chroot ${TARGET_DIR} ${CONFIG_SCRIPT}
 #rm "${TARGET_DIR}${CONFIG_SCRIPT}"
 
