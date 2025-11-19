@@ -123,7 +123,9 @@ fi
 if [ "${WITH_WIFI}" == "true" ] ; then
   echo ">>>> install-base.sh: Install wifi networks"
   mkdir -p ${TARGET_DIR}/var/lib/iwd
-  /usr/bin/install --mode=0600 --group=root --owner=root /var/lib/iwd/* ${TARGET_DIR}/var/lib/iwd
+  if [ "${INCLUDE_RECOVERY}" == "true" ] ; then
+    /usr/bin/install --mode=0600 --group=root --owner=root /var/lib/iwd/* ${TARGET_DIR}/var/lib/iwd
+  fi
 fi
 
 CONFIG_SCRIPT_SHORT=`basename "$CONFIG_SCRIPT"`
