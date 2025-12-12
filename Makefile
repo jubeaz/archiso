@@ -1,6 +1,7 @@
 ISO_NAME := archlinux-$(shell date +%Y.%m.%d)-x86_64.iso
 LOGIN := $(shell whoami)
 OUT_DIR = test
+DEVICE=null
 #decrypt:
 #	openssl enc -d -base64 -pbkdf2 -aes-256-cbc -salt  -in ./private.tgz.enc -out ./private.tgz
 crypt:
