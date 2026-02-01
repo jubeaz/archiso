@@ -56,7 +56,11 @@ SWAP_CMD_LINE_STR=""
 if [ "${HAS_SWAP}" != "false" ] ; then
   echo ">>>> install-base.sh: Compute grub swap command line"
   SWAP_UUID=$(blkid | grep ${SWAP_LV} | cut -d'"' -f 2)
-  SWAP_CMD_LINE_STR="resume=UUID=${SWAP_UUID}"
+  if [ -n "${SWAP_UUID}" ]; then
+    SWAP_CMD_LINE_STR="resume=UUID=${SWAP_UUID}"
+  else
+    echo ">>>> install-base.sh: No swap UUID found, skipping resume configuration"
+  fi
 fi
 
 echo ">>>> install-base.sh: Compute grub final command line"
@@ -149,10 +153,15 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
 # mkinitcpio.conf
 # #######################################
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: add lvm2 for initramfs.."
-  /usr/bin/sed -i 's/block filesystems/block lvm2 filesystems/' /etc/mkinitcpio.conf
-  if [ "${HAS_SWAP}" != "false" ] ; then
-    /usr/bin/sed -i 's/lvm2 filesystems/lvm2 resume filesystems/' /etc/mkinitcpio.conf
-  fi
+  # SET BACK initramfs without systemd SINCE HAVING PROBLEMS WITH LIBVIRT
+  # REMOVE systemd, sd-vconsole hooks AND ADD back udev, consolefont and block
+  # RECENT HOOKS=(base systemd autodetect microcode modconf kms keyboard keymap sd-vconsole block filesystems fsck)
+  /bin/sed -i 's|^HOOKS=.*|HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block lvm2 resume filesystems fsck)|' /etc/mkinitcpio.conf  # ADD LVM2
+  #/usr/bin/sed -i 's/block filesystems/block lvm2 filesystems/' /etc/mkinitcpio.conf
+  #if [ "${HAS_SWAP}" != "false" ] ; then
+  #  # ADD resume
+  #  #/usr/bin/sed -i 's/lvm2 filesystems/lvm2 resume filesystems/' /etc/mkinitcpio.conf
+  #fi
   if [ "${IS_ENCRYPTED}" != "false" ] ; then
     echo ">>>> ${CONFIG_SCRIPT_SHORT}: add encrypt for initramfs.."
     mkdir /root/secrets
@@ -162,7 +171,9 @@ cat <<-EOF > "${TARGET_DIR}${CONFIG_SCRIPT}"
     /usr/bin/sed -i 's/block lvm2/block encrypt lvm2/' /etc/mkinitcpio.conf
     /usr/bin/sed -i 's|FILES=(.*|FILES=(/root/secrets/cryptlvm.keyfile)|' /etc/mkinitcpio.conf
   fi
-
+  echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ${CONFIG_SCRIPT_SHORT}: DEBUG /etc/mkinitcpio.conf"
+  cat /etc/mkinitcpio.conf
+  echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ${CONFIG_SCRIPT_SHORT}: DEBUG /etc/mkinitcpio.conf"
   echo ">>>> ${CONFIG_SCRIPT_SHORT}: Creating initramfs.."
   /usr/bin/mkinitcpio -p linux-lts
 
@@ -304,7 +315,7 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
   echo 'GRUB_CMDLINE_LINUX="'${GRUB_CMD_LINE_STR}'"'  >> /etc/default/grub
 
   # GRUB_CMDLINE_LINUX_DEFAULT (params added in normal mode only)
-  /usr/bin/sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 ipv6.disable=1 lsm=landlock,lockdown,yama,apparmor,bpf"/' /etc/default/grub
+  /usr/bin/sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 ipv6.disable=0 lsm=landlock,lockdown,yama,apparmor,bpf"/' /etc/default/grub
 
   if [ "${IS_UEFI}" != "false" ] ; then
     echo ">>>> ${CONFIG_SCRIPT_SHORT}: UEFI setup"
@@ -329,6 +340,9 @@ echo "--sort rate" >> /etc/xdg/reflector/reflector.conf
     grub-install --target=i386-pc --recheck ${GRUB_PART}
     # mkdir /boot/grub/locale
     cp /usr/share/locale/en\@quot/LC_MESSAGES/grub.mo /boot/grub/locale/en.mo
+    echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ${CONFIG_SCRIPT_SHORT}: DEBUG /etc/default/grub"
+    cat /etc/default/grub
+    echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ${CONFIG_SCRIPT_SHORT}: DEBUG /etc/default/grub"
     grub-mkconfig -o /boot/grub/grub.cfg
   fi
   chmod 700 /boot
